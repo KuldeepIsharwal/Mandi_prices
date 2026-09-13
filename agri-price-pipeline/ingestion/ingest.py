@@ -126,6 +126,18 @@ def parse_record(rec):
 def upsert_records(conn, rows):
     if not rows:
         return
+
+    # Postgres rejects ON CONFLICT DO UPDATE touching the same conflict-key
+    # row twice within one statement. The source API can return duplicate
+    # (date, market, commodity, variety) entries in a single page - dedupe
+    # here, keeping the last occurrence (assumed most recent/authoritative).
+    deduped = {}
+    for row in rows:
+        date, _state, _district, market, commodity, variety = row[:6]
+        key = (date, market, commodity, variety)
+        deduped[key] = row
+    rows = list(deduped.values())
+
     with conn.cursor() as cur:
         execute_values(
             cur,
@@ -213,6 +225,7 @@ def main():
                     ingest_target(conn, target, date_str=date_str)
             except Exception as e:
                 logger.error(f"FAILED target {target}: {e}")
+                conn.rollback()  # clear the aborted-transaction state before the next target
                 failures.append(target)
     finally:
         conn.close()
