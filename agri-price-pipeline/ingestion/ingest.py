@@ -3,6 +3,7 @@ import sys
 import time
 import argparse
 import logging
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -73,6 +74,15 @@ def target_dates(lookback_days):
     ]
 
 
+def normalize_market_name(name):
+    if not name:
+        return name
+    name = re.sub(r'\b(APMC|Mandi|Mkt)\b', '', name, flags=re.IGNORECASE)
+    name = re.sub(r'\s+', ' ', name).strip()
+    manual_corrections = {'Chandwad': 'Chandvad'}
+    return manual_corrections.get(name, name)
+
+
 def fetch_page(commodity, state, district, offset, date_str=None, max_retries=3):
     params = {
         "api-key": API_KEY,
@@ -113,7 +123,7 @@ def parse_record(rec):
         date,
         rec.get("State"),
         rec.get("District"),
-        rec.get("Market"),
+        normalize_market_name(rec.get("Market")),
         rec.get("Commodity"),
         rec.get("Variety"),
         rec.get("Grade"),
